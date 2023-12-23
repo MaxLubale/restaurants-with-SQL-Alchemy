@@ -1,120 +1,183 @@
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey
-from sqlalchemy.orm import declarative_base, Session, relationship
+from sqlalchemy.orm import relationship, Session
+import sqlalchemy.orm
+from sqlalchemy.ext.declarative import declarative_base
 
-# Use sqlalchemy.orm.declarative_base() instead of deprecated declarative_base()
-Base = declarative_base()
+Base = sqlalchemy.orm.declarative_base()
 
 class Restaurant(Base):
-    __tablename__ = "restaurants"
+    __tablename__ = 'restaurants'
     id = Column(Integer, primary_key=True)
     name = Column(String)
     price = Column(Integer)
-    reviews = relationship("Review", back_populates="restaurant")
-    customers = relationship("Customer", secondary="reviews", back_populates="restaurants")
+    reviews = relationship('Review', back_populates='restaurant', cascade='all, delete-orphan')
 
+    @classmethod
+    def fanciest(cls, session):
+        fanciest_restaurant = session.query(cls).order_by(cls.price.desc()).first()
+        return f"The fanciest restaurant is {fanciest_restaurant.name} with a price of {fanciest_restaurant.price}."
+
+    def all_reviews(self):
+        return [review.full_review() for review in self.reviews if review.customer is not None]
+
+    def customers(self):
+        return [review.customer for review in self.reviews]
+
+    def restaurant_reviews(self):
+        return self.reviews
+    
     def __repr__(self):
-        return f"<Restaurant(name='{self.name}', price={self.price})>"
+        return f"Customer's favourite restaurant is {self.name} with a price of {self.price}"
 
 class Customer(Base):
-    __tablename__ = "customers"
+    __tablename__ = 'customers'
     id = Column(Integer, primary_key=True)
     first_name = Column(String)
     last_name = Column(String)
-    reviews = relationship("Review", back_populates="customer")
-    restaurants = relationship("Restaurant", secondary="reviews", back_populates="customers")
+    reviews = relationship('Review', back_populates='customer', cascade='all, delete-orphan')
 
-    def __repr__(self):
-        return f"<Customer(name='{self.first_name} {self.last_name}')>"
+    def full_name(self):
+        return f"{self.first_name} {self.last_name}"
+
+    def favorite_restaurant(self):
+        if not self.reviews:
+            return None
+        return max(self.reviews, key=lambda review: review.star_rating).restaurant
+
+    def add_review(self, restaurant, rating):
+        review = Review(restaurant=restaurant, customer=self, star_rating=rating)
+        self.reviews.append(review)
+
+    def delete_reviews(self, restaurant):
+        self.reviews = [review for review in self.reviews if review.restaurant != restaurant]
+
+    def customer_reviews(self):
+        return self.reviews
+
+    def reviewed_restaurants(self):
+        return [review.restaurant for review in self.reviews]
 
 class Review(Base):
-    __tablename__ = "reviews"
+    __tablename__ = 'reviews'
     id = Column(Integer, primary_key=True)
     star_rating = Column(Integer)
-    restaurant_id = Column(Integer, ForeignKey("restaurants.id"))
-    customer_id = Column(Integer, ForeignKey("customers.id"))
-    restaurant = relationship("Restaurant", back_populates="reviews")
-    customer = relationship("Customer", back_populates="reviews")
+    restaurant_id = Column(Integer, ForeignKey('restaurants.id'))
+    customer_id = Column(Integer, ForeignKey('customers.id'))
+    restaurant = relationship('Restaurant', back_populates='reviews')
+    customer = relationship('Customer', back_populates='reviews')
 
-    def __repr__(self):
-        return f"<Review for {self.restaurant.name} by {self.customer.first_name} {self.customer.last_name}: {self.star_rating} stars.>"
+    def full_review(self):
+        return f"Review for {self.restaurant.name} by {self.customer.full_name()}: {self.star_rating} stars."
 
-def print_data(session):
-    # Print customer's information
-    customers = session.query(Customer).all()
-    print("\nCustomers:")
-    for customer in customers:
-        print(customer)
 
-    # Print restaurants and associated reviews
-    print("\nCustomers' Restaurants:")
-    for customer in customers:
-        print(f"{customer}'s Restaurants:", customer.restaurants)
+# Create an SQLite database in memory for testing
+engine = create_engine('sqlite:///:memory:')
+Base.metadata.create_all(engine)
 
-    # Print reviews and associated customer
-    print("\nReviews:")
-    reviews = session.query(Review).all()
-    for review in reviews:
-        print(review)
+# Create a session
+session = Session(engine)
 
-    # Print the fanciest restaurant
-    fanciest_restaurant = session.query(Restaurant).order_by(Restaurant.price.desc()).first()
-    print("\nFanciest Restaurant:", fanciest_restaurant)
+# Sample data
+restaurant1 = Restaurant(name='Best Food Place', price=3)
+restaurant2 = Restaurant(name='Sarova Skies', price=4)
 
-    # Print customer's favorite restaurant
-    for customer in customers:
-        favorite_restaurant = (
-            session.query(Restaurant)
-            .join(Review)
-            .filter(Review.customer_id == customer.id)
-            .order_by(Review.star_rating.desc())
-            .first()
-        )
-        print(f"\n{customer}'s Favorite Restaurant:", favorite_restaurant)
+customer1 = Customer(first_name='John', last_name='Doe')
+customer2 = Customer(first_name='Jane', last_name='Smith')
 
-    # Print customer's reviews
-    print("\nCustomers' Reviews:")
-    for customer in customers:
-        customer_reviews = (
-            session.query(Review)
-            .filter(Review.customer_id == customer.id)
-            .all()
-        )
-        for review in customer_reviews:
-            print(review)
+review1 = Review(restaurant=restaurant1, customer=customer1, star_rating=5)
+review2 = Review(restaurant=restaurant2, customer=customer2, star_rating=4)
+review3 = Review(restaurant=restaurant2, customer=customer1, star_rating=3)
 
-    # Print restaurant's reviews
-    print("\nRestaurant's All Reviews:")
-    for restaurant in session.query(Restaurant).all():
-        restaurant_reviews = (
-            session.query(Review)
-            .filter(Review.restaurant_id == restaurant.id)
-            .all()
-        )
-        for review in restaurant_reviews:
-            print(review)
 
-if __name__ == "__main__":
-    # Use an SQLite :memory: database for this example
-    engine = create_engine("sqlite:///:memory:", echo=True)
 
-    # Create the tables
-    Base.metadata.create_all(bind=engine)
+# Add objects to the session
+session.add_all([restaurant1, restaurant2, customer1, customer2, review1, review2])
 
-    # Create a session
-    session = Session(engine)
+# Commit the session to the database
+session.commit()
 
-    # Add data to the database
-    customer1 = Customer(first_name="John", last_name="Doe")
-    customer2 = Customer(first_name="Jane", last_name="Smith")
-    restaurant1 = Restaurant(name="Restaurant A", price=3)
-    restaurant2 = Restaurant(name="Restaurant B", price=4)
-    review1 = Review(star_rating=5, restaurant=restaurant1, customer=customer1)
-    review2 = Review(star_rating=4, restaurant=restaurant2, customer=customer1)
-    review3 = Review(star_rating=3, restaurant=restaurant1, customer=customer2)
 
-    session.add_all([customer1, customer2, restaurant1, restaurant2, review1, review2, review3])
-    session.commit()
+# Print all customers
+all_customers = session.query(Customer).all()
+print("\nAll Customers:")
+for customer in all_customers:
+    print(f"{customer.full_name()}")
 
-    # Print concise data
-    print_data(session)
+print("\n" + "="*50 + "\n")
 
+# Print all reviews
+all_reviews = session.query(Review).all()
+print("\nAll Reviews:")
+for review in all_reviews:
+    print(f"{review.full_review()}")
+
+print("\n" + "="*50 + "\n")
+
+# Print all restaurants
+all_restaurants = session.query(Restaurant).all()
+print("\nAll Restaurants:")
+for restaurant in all_restaurants:
+    print(f"{restaurant.name}, Price: {restaurant.price}")
+
+print("\n" + "="*50 + "\n")
+
+# Display restaurant information
+print("\nDisplay restaurant information:")
+print(f"\nRestaurant: {restaurant1.name}, Price: {restaurant1.price}")
+print("Reviews for the restaurant:")
+for review in restaurant1.reviews:
+    print(f"- {review.full_review()}\n")
+
+
+print(f"\nRestaurant: {restaurant2.name}, Price: {restaurant2.price}")
+print("Reviews for the restaurant:")
+for review in restaurant2.reviews:
+    print(f"- {review.full_review()}")
+
+print("\n" + "="*50 + "\n")
+
+# Display customer information
+print("Display customer information:")
+print(f"\nCustomer: {customer1.full_name()}")
+print(customer1.favorite_restaurant())
+print("Reviews by the customer:")
+for review in customer1.reviews:
+    print(f"- {review.full_review()}\n")
+
+
+print(f"\nCustomer: {customer2.full_name()}")
+print(customer2.favorite_restaurant())
+print("Reviews by the customer:")
+for review in customer2.reviews:
+    print(f"- {review.full_review()}")
+
+print("\n" + "="*50 + "\n")
+
+# Display information about the first review
+print("Display information about the first review:")
+first_review = session.query(Review).first()
+print(f"\nReview: {first_review.full_review()}")
+print(f"Restaurant: {first_review.restaurant.name}")
+print(f"Customer: {first_review.customer.full_name()}\n")
+
+print("\n" + "="*50 + "\n")
+
+# fanciest restaurant
+print(restaurant1.fanciest(session))
+
+print("\n" + "="*50 + "\n")
+# adding and deleting a review
+print("Adding a Review:")
+customer2.add_review(restaurant1, 3)
+print(customer2.reviews[1].full_review())
+
+print("\n" + "="*50 + "\n")
+
+print("\nBefore Deleting Review:")
+print(restaurant1.all_reviews())
+
+print("\nAfter Deleting Review:")
+customer2.delete_reviews(restaurant1)
+print(restaurant1.all_reviews())
+
+print("\n" + "="*50 + "\n")
