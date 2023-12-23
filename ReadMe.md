@@ -32,7 +32,7 @@ Before you begin, ensure you have the following installed:
 ### Installation
 
 1. Clone the repository:
-  - git clone https://github.com/your-username/restaurants-with-SQL-Alchemy.git
+  - git clone https://github.com/MaxLubale/restaurants-with-SQL-Alchemy
 
 2. Navigate to the project directory:
   - cd restaurants-with-SQL-Alchemy
