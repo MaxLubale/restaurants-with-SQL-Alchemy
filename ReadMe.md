@@ -10,6 +10,7 @@ Restaurants with SQLAlchemy is a simple Python project that demonstrates the use
 - [Usage](#usage)
 - [Project Structure](#project-structure)
 - [Contributing](#contributing)
+- [Author](#author)
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
 
@@ -57,6 +58,11 @@ Before you begin, ensure you have the following installed:
 
 ## Contributing
 - Contributions are welcome! If you find any issues or want to enhance the project, feel free to open a pull request.
+
+## Author
+  - Name : MAXWELL CLIFF LUBALE
+  - Github : https://github.com/MaxLubale
+
 
 ## License
 This project is licensed under the MIT License - see the LICENSE file for details.
